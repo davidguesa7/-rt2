@@ -241,6 +241,10 @@ Publicaciones:
         with open("resumen_prueba.txt", "w", encoding="utf-8") as f:
             f.write(respuesta.text.strip())
 
+        print("RESUMEN_PRUEBA_INICIO")
+        print(respuesta.text.strip())
+        print("RESUMEN_PRUEBA_FIN")
+
         print(
             f"PRUEBA COMPLETADA para @{CANAL}: {len(publicaciones)} publicaciones "
             "procesadas por Gemini. Se guardaron publicaciones_prueba.txt y "
