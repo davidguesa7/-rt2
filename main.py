@@ -233,7 +233,7 @@ Publicaciones:
         print(f"Prueba: enviando {len(publicaciones)} publicaciones a Gemini...")
         ai_client = genai.Client(api_key=GEMINI_API_KEY)
         respuesta = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=prompt_prueba,
         )
         if not respuesta.text or not respuesta.text.strip():
@@ -301,7 +301,7 @@ Publicaciones:
     print(f"Enviando {len(publicaciones)} publicaciones a Gemini...")
     ai_client = genai.Client(api_key=GEMINI_API_KEY)
     respuesta = ai_client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.8-flash",
         contents=prompt,
     )
 
