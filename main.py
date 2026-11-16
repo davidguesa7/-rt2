@@ -1,6 +1,7 @@
 import os
 import asyncio
 import re
+import time
 from html import unescape
 from datetime import datetime, timezone
 from urllib.parse import urljoin
@@ -15,6 +16,30 @@ API_ID = int(os.environ.get("TG_API_ID", "0"))
 API_HASH = os.environ.get("TG_API_HASH", "")
 TG_SESSION = os.environ.get("TG_SESSION", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+def generar_resumen_con_respaldo(ai_client, contenido):
+    """Reintenta errores temporales y cambia a otro modelo Flash estable si hay saturación."""
+    modelos = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"]
+    errores_temporales = {429, 500, 502, 503, 504}
+
+    for modelo in modelos:
+        for intento in range(3):
+            try:
+                print(f"Solicitando resumen con {modelo} (intento {intento + 1}/3)...")
+                return ai_client.models.generate_content(model=modelo, contents=contenido)
+            except Exception as exc:
+                codigo = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+                if codigo not in errores_temporales and not any(str(n) in str(exc) for n in errores_temporales):
+                    raise
+                if intento < 2:
+                    espera = 5 * (2 ** intento)
+                    print(f"{modelo} temporalmente no disponible (HTTP {codigo or 'temporal'}). Reintentando en {espera} segundos...")
+                    time.sleep(espera)
+                else:
+                    print(f"{modelo} sigue saturado; probando el siguiente modelo Flash.")
+
+    raise RuntimeError("Gemini no estuvo disponible en los tres modelos Flash. No se modificará el cursor de Telegram; vuelve a ejecutar más tarde.")
+
 
 CANAL = os.environ.get("TG_TEST_CHANNEL", "rtnoticias").strip().lstrip("@")
 ARCHIVO_ESTADO = "ultimo_id.txt"
@@ -232,10 +257,7 @@ Publicaciones:
 """
         print(f"Prueba: enviando {len(publicaciones)} publicaciones a Gemini...")
         ai_client = genai.Client(api_key=GEMINI_API_KEY)
-        respuesta = ai_client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt_prueba,
-        )
+        respuesta = generar_resumen_con_respaldo(ai_client, prompt_prueba)
         if not respuesta.text or not respuesta.text.strip():
             raise RuntimeError("Gemini no devolvió el resumen de prueba.")
         with open("resumen_prueba.txt", "w", encoding="utf-8") as f:
@@ -300,10 +322,7 @@ Publicaciones:
 
     print(f"Enviando {len(publicaciones)} publicaciones a Gemini...")
     ai_client = genai.Client(api_key=GEMINI_API_KEY)
-    respuesta = ai_client.models.generate_content(
-        model="gemini-3.8-flash",
-        contents=prompt,
-    )
+    respuesta = generar_resumen_con_respaldo(ai_client, prompt)
 
     if not respuesta.text or not respuesta.text.strip():
         raise RuntimeError("Gemini no devolvió un resumen. El cursor no se actualizará.")
