@@ -45,6 +45,7 @@ CANAL = os.environ.get("TG_TEST_CHANNEL", "rtnoticias").strip().lstrip("@")
 ARCHIVO_ESTADO = "ultimo_id.txt"
 ARCHIVO_RESUMEN = "resumen_hoy.txt"
 MAX_PUBLICACIONES = 500
+MAX_PUBLICACIONES_PRUEBA = 100
 
 
 def obtener_ultimo_id():
@@ -151,7 +152,7 @@ def extraer_publicaciones_web(ultimo_id):
     return resultado[:MAX_PUBLICACIONES] if ultimo_id > 0 else resultado[-MAX_PUBLICACIONES:]
 
 
-async def extraer_telethon(client, entidad, ultimo_id):
+async def extraer_telethon(client, entidad, ultimo_id, limite=MAX_PUBLICACIONES):
     # Diagnóstico independiente: comprueba si Telegram entrega mensajes recientes
     # antes de aplicar el filtro por último ID.
     recientes = await client.get_messages(entidad, limit=5)
@@ -168,11 +169,11 @@ async def extraer_telethon(client, entidad, ultimo_id):
         # Recupera las publicaciones pendientes en orden cronológico, empezando
         # por las más antiguas después del cursor para no saltarse noticias.
         iterador = client.iter_messages(
-            entidad, min_id=ultimo_id, limit=MAX_PUBLICACIONES, reverse=True
+            entidad, min_id=ultimo_id, limit=limite, reverse=True
         )
     else:
         # Primera ejecución: toma las 500 más recientes.
-        iterador = client.iter_messages(entidad, limit=MAX_PUBLICACIONES)
+        iterador = client.iter_messages(entidad, limit=limite)
 
     mensajes = [m async for m in iterador]
     print(
@@ -216,7 +217,8 @@ async def main():
                 f"Canal resuelto: título={getattr(entidad, 'title', 'sin título')!r}, "
                 f"id={getattr(entidad, 'id', 'desconocido')}"
             )
-            publicaciones = await extraer_telethon(client, entidad, ultimo_id)
+            limite_extraccion = MAX_PUBLICACIONES_PRUEBA if modo_prueba else MAX_PUBLICACIONES
+            publicaciones = await extraer_telethon(client, entidad, ultimo_id, limite=limite_extraccion)
             print(f"Telethon recuperó {len(publicaciones)} publicaciones con texto.")
         except Exception as exc:
             print(f"Telethon no pudo recuperar el historial: {type(exc).__name__}: {exc}")
