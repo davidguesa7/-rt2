@@ -19,7 +19,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 CANAL = os.environ.get("TG_TEST_CHANNEL", "rtnoticias").strip().lstrip("@")
 ARCHIVO_ESTADO = "ultimo_id.txt"
 ARCHIVO_RESUMEN = "resumen_hoy.txt"
-MAX_PUBLICACIONES = 100
+MAX_PUBLICACIONES = 500
 
 
 def obtener_ultimo_id():
@@ -45,7 +45,8 @@ def extraer_publicaciones_web(ultimo_id):
         "Accept-Language": "es,en;q=0.8",
     }
 
-    for pagina in range(5):
+    alcanzado_cursor = ultimo_id == 0
+    for pagina in range(100):
         params = {"before": antes_de} if antes_de else {}
         respuesta = requests.get(url, params=params, headers=headers, timeout=25)
         respuesta.raise_for_status()
@@ -104,14 +105,25 @@ def extraer_publicaciones_web(ultimo_id):
             break
 
         menor_id = min(ids_pagina)
-        if menor_id <= ultimo_id or len(publicaciones) >= MAX_PUBLICACIONES:
+        if ultimo_id > 0 and menor_id <= ultimo_id:
+            alcanzado_cursor = True
+            break
+        if ultimo_id == 0 and len(publicaciones) >= MAX_PUBLICACIONES:
             break
         if antes_de == menor_id:
             break
         antes_de = menor_id
 
+    if ultimo_id > 0 and not alcanzado_cursor:
+        raise RuntimeError(
+            "El respaldo web no alcanzó el último ID guardado dentro de 100 páginas; "
+            "se detiene para no saltarse publicaciones ni avanzar el cursor."
+        )
+
     resultado = sorted(publicaciones.values(), key=lambda x: x["id"])
-    return resultado[-MAX_PUBLICACIONES:]
+    # Con cursor, procesa primero las publicaciones más antiguas pendientes.
+    # En la primera ejecución, toma las 500 más recientes.
+    return resultado[:MAX_PUBLICACIONES] if ultimo_id > 0 else resultado[-MAX_PUBLICACIONES:]
 
 
 async def extraer_telethon(client, entidad, ultimo_id):
@@ -128,8 +140,13 @@ async def extraer_telethon(client, entidad, ultimo_id):
         print(f"Mensaje reciente id={mensaje.id}, texto={muestra!r}")
 
     if ultimo_id > 0:
-        iterador = client.iter_messages(entidad, min_id=ultimo_id, limit=MAX_PUBLICACIONES)
+        # Recupera las publicaciones pendientes en orden cronológico, empezando
+        # por las más antiguas después del cursor para no saltarse noticias.
+        iterador = client.iter_messages(
+            entidad, min_id=ultimo_id, limit=MAX_PUBLICACIONES, reverse=True
+        )
     else:
+        # Primera ejecución: toma las 500 más recientes.
         iterador = client.iter_messages(entidad, limit=MAX_PUBLICACIONES)
 
     mensajes = [m async for m in iterador]
@@ -185,11 +202,53 @@ async def main():
         print("Credenciales de Telethon incompletas; se usará la vista pública.")
 
     if modo_prueba:
-        print(
-            f"DIAGNÓSTICO TERMINADO para @{CANAL}: "
-            f"{len(publicaciones)} publicaciones con texto recuperadas por Telethon. "
-            "No se ejecutó Gemini y no se modificó ultimo_id.txt ni resumen_hoy.txt."
+        if not publicaciones:
+            raise RuntimeError(f"No se recuperaron publicaciones para la prueba de @{CANAL}.")
+
+        bloque_noticias = "\\n\\n---\\n\\n".join(
+            f"[ID {p['id']}] {p['text']}\\nEnlace: {p['link']}"
+            for p in publicaciones
         )
+        with open("publicaciones_prueba.txt", "w", encoding="utf-8") as f:
+            f.write(
+                f"Canal: @{CANAL}\\n"
+                f"Publicaciones recuperadas: {len(publicaciones)}\\n\\n"
+                + bloque_noticias
+            )
+
+        if not GEMINI_API_KEY:
+            raise RuntimeError("Falta GEMINI_API_KEY; no se puede generar el resumen de prueba.")
+
+        prompt_prueba = f"""
+Prepara un reporte completo en español a partir de estas publicaciones del canal @{CANAL}.
+1. Incluye todas las noticias distintas; no omitas ninguna.
+2. Une publicaciones que hablen del mismo suceso o sean actualizaciones.
+3. Organiza cada noticia con un titular y un resumen claro con los datos importantes.
+4. Conserva el enlace de Telegram al final de cada noticia.
+5. No inventes datos que no aparezcan en las publicaciones.
+
+Publicaciones:
+{bloque_noticias}
+"""
+        print(f"Prueba: enviando {len(publicaciones)} publicaciones a Gemini...")
+        ai_client = genai.Client(api_key=GEMINI_API_KEY)
+        respuesta = ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt_prueba,
+        )
+        if not respuesta.text or not respuesta.text.strip():
+            raise RuntimeError("Gemini no devolvió el resumen de prueba.")
+        with open("resumen_prueba.txt", "w", encoding="utf-8") as f:
+            f.write(respuesta.text.strip())
+
+        print(
+            f"PRUEBA COMPLETADA para @{CANAL}: {len(publicaciones)} publicaciones "
+            "procesadas por Gemini. Se guardaron publicaciones_prueba.txt y "
+            "resumen_prueba.txt. No se modificaron ultimo_id.txt ni resumen_hoy.txt."
+        )
+        # Deja el texto disponible también en los logs para poder recuperarlo.
+        for p in publicaciones:
+            print(f"PUBLICACION_ID={p['id']}\n{p['text']}\nENLACE={p['link']}\n---")
         return
 
     # Si Telethon no devuelve contenido, usa la vista pública oficial t.me/s.
