@@ -39,10 +39,25 @@ jobs:
           TG_TEST_CHANNEL: ${{ inputs.canal_prueba }}
         run: python main.py
 
-      - name: Guardar cambios sin acumular historial en git
+      - name: Publicar archivos de la prueba
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultado-prueba-rt-${{ github.run_number }}
+          path: |
+            publicaciones_prueba.txt
+            resumen_prueba.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Guardar cambios del resumen diario
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add ultimo_id.txt resumen_hoy.txt
-          git commit --amend -m "Actualización del resumen diario" || git commit -m "Actualización del resumen diario"
-          git push --force
+          if ! git diff --cached --quiet; then
+            git commit -m "Actualización del resumen diario"
+            git push
+          else
+            echo "No hay cambios en el cursor ni en el resumen; no se crea ningún commit."
+          fi
