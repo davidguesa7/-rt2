@@ -136,7 +136,7 @@ async def extraer_telethon(client, entidad, ultimo_id):
         f"fechas={[str(m.date) for m in recientes]}"
     )
     for mensaje in recientes[:3]:
-        muestra = (mensaje.raw_text or "").replace("\\n", " ")[:160]
+        muestra = (mensaje.raw_text or "").replace("\n", " ")[:160]
         print(f"Mensaje reciente id={mensaje.id}, texto={muestra!r}")
 
     if ultimo_id > 0:
@@ -155,7 +155,7 @@ async def extraer_telethon(client, entidad, ultimo_id):
         f"antes de filtrar texto; IDs={[m.id for m in mensajes[:5]]}"
     )
     resultado = []
-    for m in reversed(mensajes):
+    for m in sorted(mensajes, key=lambda x: x.id):
         texto = (m.raw_text or "").strip()
         if texto:
             resultado.append({
@@ -205,14 +205,14 @@ async def main():
         if not publicaciones:
             raise RuntimeError(f"No se recuperaron publicaciones para la prueba de @{CANAL}.")
 
-        bloque_noticias = "\\n\\n---\\n\\n".join(
-            f"[ID {p['id']}] {p['text']}\\nEnlace: {p['link']}"
+        bloque_noticias = "\n\n---\n\n".join(
+            f"[ID {p['id']}] {p['text']}\nEnlace: {p['link']}"
             for p in publicaciones
         )
         with open("publicaciones_prueba.txt", "w", encoding="utf-8") as f:
             f.write(
-                f"Canal: @{CANAL}\\n"
-                f"Publicaciones recuperadas: {len(publicaciones)}\\n\\n"
+                f"Canal: @{CANAL}\n"
+                f"Publicaciones recuperadas: {len(publicaciones)}\n\n"
                 + bloque_noticias
             )
 
