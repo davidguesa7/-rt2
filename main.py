@@ -18,28 +18,49 @@ TG_SESSION = os.environ.get("TG_SESSION", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 def generar_resumen_con_respaldo(ai_client, contenido):
-    """Reintenta errores temporales y cambia a otro modelo Flash estable si hay saturación."""
+    """Reintenta fallos HTTP y desconexiones de red; cambia de modelo si persisten."""
     modelos = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"]
-    errores_temporales = {429, 500, 502, 503, 504}
+    errores_http = {408, 429, 500, 502, 503, 504}
+    errores_red = (
+        "RemoteProtocolError", "ConnectError", "ReadError", "WriteError",
+        "TimeoutException", "ConnectTimeout", "ReadTimeout",
+        "Server disconnected", "connection reset", "connection aborted",
+        "temporarily unavailable", "service unavailable"
+    )
 
+    ultimo_error = None
     for modelo in modelos:
         for intento in range(3):
             try:
                 print(f"Solicitando resumen con {modelo} (intento {intento + 1}/3)...")
                 return ai_client.models.generate_content(model=modelo, contents=contenido)
             except Exception as exc:
+                ultimo_error = exc
                 codigo = getattr(exc, "code", None) or getattr(exc, "status_code", None)
-                if codigo not in errores_temporales and not any(str(n) in str(exc) for n in errores_temporales):
+                texto_error = f"{type(exc).__name__}: {exc}"
+                es_temporal = (
+                    codigo in errores_http
+                    or any(str(n) in texto_error for n in errores_http)
+                    or any(nombre.lower() in texto_error.lower() for nombre in errores_red)
+                )
+                if not es_temporal:
                     raise
+
                 if intento < 2:
-                    espera = 5 * (2 ** intento)
-                    print(f"{modelo} temporalmente no disponible (HTTP {codigo or 'temporal'}). Reintentando en {espera} segundos...")
+                    espera = 8 * (2 ** intento)
+                    print(
+                        f"Fallo temporal de {modelo}: {texto_error[:220]}. "
+                        f"Reintentando en {espera} segundos..."
+                    )
                     time.sleep(espera)
                 else:
-                    print(f"{modelo} sigue saturado; probando el siguiente modelo Flash.")
+                    print(f"{modelo} no respondió tras 3 intentos; probando el siguiente modelo.")
 
-    raise RuntimeError("Gemini no estuvo disponible en los tres modelos Flash. No se modificará el cursor de Telegram; vuelve a ejecutar más tarde.")
-
+    raise RuntimeError(
+        "Gemini no respondió en los tres modelos Flash después de reintentos. "
+        "Las publicaciones se conservaron y el cursor de Telegram no se modificó. "
+        f"Último error: {type(ultimo_error).__name__}: {ultimo_error}"
+    )
 
 CANAL = os.environ.get("TG_TEST_CHANNEL", "rtnoticias").strip().lstrip("@")
 ARCHIVO_ESTADO = "ultimo_id.txt"
