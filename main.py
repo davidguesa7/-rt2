@@ -62,11 +62,10 @@ def generar_resumen_con_respaldo(ai_client, contenido):
         f"Último error: {type(ultimo_error).__name__}: {ultimo_error}"
     )
 
-CANAL = os.environ.get("TG_TEST_CHANNEL", "rtnoticias").strip().lstrip("@")
+CANAL = "rtnoticias"
 ARCHIVO_ESTADO = "ultimo_id.txt"
 ARCHIVO_RESUMEN = "resumen_hoy.txt"
 MAX_PUBLICACIONES = 500
-MAX_PUBLICACIONES_PRUEBA = 100
 
 
 def obtener_ultimo_id():
@@ -214,12 +213,11 @@ async def extraer_telethon(client, entidad, ultimo_id, limite=MAX_PUBLICACIONES)
 
 
 async def main():
-    modo_prueba = bool(os.environ.get("TG_TEST_CHANNEL", "").strip())
-    if not modo_prueba and not GEMINI_API_KEY:
+    if not GEMINI_API_KEY:
         raise RuntimeError("Falta GEMINI_API_KEY en GitHub Secrets.")
 
     # La prueba de otro canal nunca usa ni modifica el cursor de RT.
-    ultimo_id = 0 if modo_prueba else obtener_ultimo_id()
+    ultimo_id = obtener_ultimo_id()
     print(f"Último ID guardado: {ultimo_id}")
     publicaciones = []
 
@@ -238,8 +236,7 @@ async def main():
                 f"Canal resuelto: título={getattr(entidad, 'title', 'sin título')!r}, "
                 f"id={getattr(entidad, 'id', 'desconocido')}"
             )
-            limite_extraccion = MAX_PUBLICACIONES_PRUEBA if modo_prueba else MAX_PUBLICACIONES
-            publicaciones = await extraer_telethon(client, entidad, ultimo_id, limite=limite_extraccion)
+            publicaciones = await extraer_telethon(client, entidad, ultimo_id, limite=MAX_PUBLICACIONES)
             print(f"Telethon recuperó {len(publicaciones)} publicaciones con texto.")
         except Exception as exc:
             print(f"Telethon no pudo recuperar el historial: {type(exc).__name__}: {exc}")
@@ -248,76 +245,6 @@ async def main():
                 await client.disconnect()
     else:
         print("Credenciales de Telethon incompletas; se usará la vista pública.")
-
-    if modo_prueba:
-        if not publicaciones:
-            raise RuntimeError(f"No se recuperaron publicaciones para la prueba de @{CANAL}.")
-
-        bloque_noticias = "\n\n---\n\n".join(
-            f"[ID {p['id']}] {p['text']}\nEnlace: {p['link']}"
-            for p in publicaciones
-        )
-        with open("publicaciones_prueba.txt", "w", encoding="utf-8") as f:
-            f.write(
-                f"Canal: @{CANAL}\n"
-                f"Publicaciones recuperadas: {len(publicaciones)}\n\n"
-                + bloque_noticias
-            )
-
-        if not GEMINI_API_KEY:
-            raise RuntimeError("Falta GEMINI_API_KEY; no se puede generar el resumen de prueba.")
-
-        prompt_prueba = f"""
-Actúa como editor de un boletín de noticias. Convierte estas publicaciones de @{CANAL} en un COMPILADO DE NOTICIAS, no en un resumen general por temas.
-
-OBJETIVO Y FORMATO:
-- Cada noticia debe aparecer como una entrada independiente con este formato:
-  **Titular**
-  Reseña: conserva y redacta con claridad la información descriptiva que RT publicó en ese mensaje. Debe ser una reseña breve pero sustanciosa: incluye quién, qué ocurrió, dónde, cuándo, cifras, declaraciones y consecuencias que estén presentes en el texto. No la reduzcas a una sola frase vaga ni agregues análisis propio.
-  Fuente: enlace(s) de Telegram de la(s) publicación(es) usada(s).
-- Mantén el titular original cuando exista. Corrige solo errores evidentes de formato; no cambies su sentido. Si no hay titular explícito, crea uno fiel al contenido.
-- La reseña debe reflejar el contenido publicado por RT, no una explicación general del tema. No omitas detalles noticiosos importantes para acortar el texto.
-
-DUPLICADOS Y ACTUALIZACIONES:
-- Elimina copias exactas o publicaciones que repitan la misma noticia sin aportar información nueva.
-- Considera que dos publicaciones son la misma noticia solo si se refieren al mismo suceso concreto; compartir país, personaje o conflicto no basta para fusionarlas.
-- Si hay varias publicaciones sobre el mismo suceso, crea una sola entrada. Integra los datos nuevos que aporten las publicaciones anteriores y posteriores, y da prioridad a la actualización más reciente y completa. No repitas información.
-- Incluye todos los enlaces de Telegram relevantes para esa noticia, preferiblemente en orden cronológico.
-- Si una publicación posterior corrige o contradice una anterior, deja clara la corrección y prioriza la información más reciente, sin ocultar la discrepancia.
-
-COBERTURA Y FIDELIDAD:
-- Incluye todas las noticias distintas de las publicaciones recibidas. No agrupes todo bajo categorías amplias ni elimines noticias menores.
-- Ordena las entradas de más reciente a más antigua según las publicaciones utilizadas.
-- No inventes, completes ni deduzcas nombres, cargos, fechas, cifras, causas o contexto que no aparezcan en los mensajes.
-- Atribuye las afirmaciones a RT o a la fuente citada cuando corresponda; no presentes como hecho verificado algo que el mensaje solo atribuye a una parte.
-- Si un mensaje no es una noticia (publicidad, saludo, contenido repetido sin novedad), omítelo.
-
-Antes de entregar, comprueba que cada publicación noticiosa esté representada en una entrada y que ninguna noticia distinta se haya fusionado por error.
-
-Publicaciones:
-{bloque_noticias}
-"""
-        print(f"Prueba: enviando {len(publicaciones)} publicaciones a Gemini...")
-        ai_client = genai.Client(api_key=GEMINI_API_KEY)
-        respuesta = generar_resumen_con_respaldo(ai_client, prompt_prueba)
-        if not respuesta.text or not respuesta.text.strip():
-            raise RuntimeError("Gemini no devolvió el resumen de prueba.")
-        with open("resumen_prueba.txt", "w", encoding="utf-8") as f:
-            f.write(respuesta.text.strip())
-
-        print("RESUMEN_PRUEBA_INICIO")
-        print(respuesta.text.strip())
-        print("RESUMEN_PRUEBA_FIN")
-
-        print(
-            f"PRUEBA COMPLETADA para @{CANAL}: {len(publicaciones)} publicaciones "
-            "procesadas por Gemini. Se guardaron publicaciones_prueba.txt y "
-            "resumen_prueba.txt. No se modificaron ultimo_id.txt ni resumen_hoy.txt."
-        )
-        # Deja el texto disponible también en los logs para poder recuperarlo.
-        for p in publicaciones:
-            print(f"PUBLICACION_ID={p['id']}\n{p['text']}\nENLACE={p['link']}\n---")
-        return
 
     # Si Telethon no devuelve contenido, usa la vista pública oficial t.me/s.
     if not publicaciones:
