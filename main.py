@@ -247,12 +247,31 @@ async def main():
             raise RuntimeError("Falta GEMINI_API_KEY; no se puede generar el resumen de prueba.")
 
         prompt_prueba = f"""
-Prepara un reporte completo en español a partir de estas publicaciones del canal @{CANAL}.
-1. Incluye todas las noticias distintas; no omitas ninguna.
-2. Une publicaciones que hablen del mismo suceso o sean actualizaciones.
-3. Organiza cada noticia con un titular y un resumen claro con los datos importantes.
-4. Conserva el enlace de Telegram al final de cada noticia.
-5. No inventes datos que no aparezcan en las publicaciones.
+Actúa como editor de un boletín de noticias. Convierte estas publicaciones de @{CANAL} en un COMPILADO DE NOTICIAS, no en un resumen general por temas.
+
+OBJETIVO Y FORMATO:
+- Cada noticia debe aparecer como una entrada independiente con este formato:
+  **Titular**
+  Reseña: conserva y redacta con claridad la información descriptiva que RT publicó en ese mensaje. Debe ser una reseña breve pero sustanciosa: incluye quién, qué ocurrió, dónde, cuándo, cifras, declaraciones y consecuencias que estén presentes en el texto. No la reduzcas a una sola frase vaga ni agregues análisis propio.
+  Fuente: enlace(s) de Telegram de la(s) publicación(es) usada(s).
+- Mantén el titular original cuando exista. Corrige solo errores evidentes de formato; no cambies su sentido. Si no hay titular explícito, crea uno fiel al contenido.
+- La reseña debe reflejar el contenido publicado por RT, no una explicación general del tema. No omitas detalles noticiosos importantes para acortar el texto.
+
+DUPLICADOS Y ACTUALIZACIONES:
+- Elimina copias exactas o publicaciones que repitan la misma noticia sin aportar información nueva.
+- Considera que dos publicaciones son la misma noticia solo si se refieren al mismo suceso concreto; compartir país, personaje o conflicto no basta para fusionarlas.
+- Si hay varias publicaciones sobre el mismo suceso, crea una sola entrada. Integra los datos nuevos que aporten las publicaciones anteriores y posteriores, y da prioridad a la actualización más reciente y completa. No repitas información.
+- Incluye todos los enlaces de Telegram relevantes para esa noticia, preferiblemente en orden cronológico.
+- Si una publicación posterior corrige o contradice una anterior, deja clara la corrección y prioriza la información más reciente, sin ocultar la discrepancia.
+
+COBERTURA Y FIDELIDAD:
+- Incluye todas las noticias distintas de las publicaciones recibidas. No agrupes todo bajo categorías amplias ni elimines noticias menores.
+- Ordena las entradas de más reciente a más antigua según las publicaciones utilizadas.
+- No inventes, completes ni deduzcas nombres, cargos, fechas, cifras, causas o contexto que no aparezcan en los mensajes.
+- Atribuye las afirmaciones a RT o a la fuente citada cuando corresponda; no presentes como hecho verificado algo que el mensaje solo atribuye a una parte.
+- Si un mensaje no es una noticia (publicidad, saludo, contenido repetido sin novedad), omítelo.
+
+Antes de entregar, comprueba que cada publicación noticiosa esté representada en una entrada y que ninguna noticia distinta se haya fusionado por error.
 
 Publicaciones:
 {bloque_noticias}
@@ -311,12 +330,31 @@ Publicaciones:
         for p in publicaciones
     )
     prompt = f"""
-Prepara un reporte completo en español a partir de estas publicaciones de RT en Español.
-1. Incluye todas las noticias distintas; no omitas ninguna.
-2. Une publicaciones que hablen del mismo suceso o sean actualizaciones.
-3. Organiza cada noticia con un titular y un resumen claro con los datos importantes.
-4. Conserva el enlace de Telegram al final de cada noticia.
-5. No inventes datos que no aparezcan en las publicaciones.
+Actúa como editor de un boletín de noticias. Convierte estas publicaciones de RT en Español en un COMPILADO DE NOTICIAS, no en un resumen general por temas.
+
+OBJETIVO Y FORMATO:
+- Cada noticia debe aparecer como una entrada independiente con este formato:
+  **Titular**
+  Reseña: conserva y redacta con claridad la información descriptiva que RT publicó en ese mensaje. Debe ser una reseña breve pero sustanciosa: incluye quién, qué ocurrió, dónde, cuándo, cifras, declaraciones y consecuencias que estén presentes en el texto. No la reduzcas a una sola frase vaga ni agregues análisis propio.
+  Fuente: enlace(s) de Telegram de la(s) publicación(es) usada(s).
+- Mantén el titular original cuando exista. Corrige solo errores evidentes de formato; no cambies su sentido. Si no hay titular explícito, crea uno fiel al contenido.
+- La reseña debe reflejar el contenido publicado por RT, no una explicación general del tema. No omitas detalles noticiosos importantes para acortar el texto.
+
+DUPLICADOS Y ACTUALIZACIONES:
+- Elimina copias exactas o publicaciones que repitan la misma noticia sin aportar información nueva.
+- Considera que dos publicaciones son la misma noticia solo si se refieren al mismo suceso concreto; compartir país, personaje o conflicto no basta para fusionarlas.
+- Si hay varias publicaciones sobre el mismo suceso, crea una sola entrada. Integra los datos nuevos que aporten las publicaciones anteriores y posteriores, y da prioridad a la actualización más reciente y completa. No repitas información.
+- Incluye todos los enlaces de Telegram relevantes para esa noticia, preferiblemente en orden cronológico.
+- Si una publicación posterior corrige o contradice una anterior, deja clara la corrección y prioriza la información más reciente, sin ocultar la discrepancia.
+
+COBERTURA Y FIDELIDAD:
+- Incluye todas las noticias distintas de las publicaciones recibidas. No agrupes todo bajo categorías amplias ni elimines noticias menores.
+- Ordena las entradas de más reciente a más antigua según las publicaciones utilizadas.
+- No inventes, completes ni deduzcas nombres, cargos, fechas, cifras, causas o contexto que no aparezcan en los mensajes.
+- Atribuye las afirmaciones a RT o a la fuente citada cuando corresponda; no presentes como hecho verificado algo que el mensaje solo atribuye a una parte.
+- Si un mensaje no es una noticia (publicidad, saludo, contenido repetido sin novedad), omítelo.
+
+Antes de entregar, comprueba que cada publicación noticiosa esté representada en una entrada y que ninguna noticia distinta se haya fusionado por error.
 
 Publicaciones:
 {bloque_noticias}
