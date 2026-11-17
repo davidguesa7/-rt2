@@ -5,12 +5,6 @@ on:
     # Corre todos los días a las 6:45 AM hora de California (14:45 UTC)
     - cron: '45 14 * * *'
   workflow_dispatch:
-    inputs:
-      canal_prueba:
-        description: "Canal alternativo para probar solo la lectura de Telegram"
-        required: false
-        default: "rtnoticias"
-        type: string
 
 permissions:
   contents: write
@@ -39,19 +33,7 @@ jobs:
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           TG_SESSION: ${{ secrets.TG_SESSION }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          TG_TEST_CHANNEL: ${{ inputs.canal_prueba }}
         run: python main.py
-
-      - name: Publicar archivos de la prueba
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: resultado-prueba-rt-${{ github.run_number }}
-          path: |
-            publicaciones_prueba.txt
-            resumen_prueba.txt
-          if-no-files-found: ignore
-          retention-days: 7
 
       - name: Guardar cambios del resumen diario
         run: |
